@@ -7,72 +7,108 @@ import { getUrl } from "aws-amplify/storage";
 const client = generateClient<Schema>();
 
 function TodoPage() {
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const [user, setUser] = useState<{ sub: string; profilePicUrl?: string } | null>(null);
+  // All todos from database
+  const [todos, setTodos] = useState<
+    Array<Schema["Todo"]["type"] & { profilePicUrl?: string }>
+  >([]);
 
-  // Fetch signed-in user’s info
+  // Current signed-in user's sub (if any)
+  const [user, setUser] = useState<{ sub: string } | null>(null);
+
+  // STEP 1: Get current user info (sub) if signed in
   useEffect(() => {
     const loadUser = async () => {
       try {
         const session = await fetchAuthSession();
         const payload = session.tokens?.idToken?.payload;
         if (payload && payload["sub"]) {
-          const sub = payload["sub"] as string;
-          const fileName = `profile-pics/${sub}_profile_pic`;
-          try {
-            const { url } = await getUrl({ key: fileName });
-            setUser({ sub, profilePicUrl: url.toString() });
-          } catch (err) {
-            setUser({ sub }); // No pic yet
-          }
+          setUser({ sub: payload["sub"] });
         }
       } catch (err) {
-        console.log("No signed-in user:", err);
-        setUser(null); // Guest
+        console.log("Guest user:", err);
+        setUser(null); // Not signed in
       }
     };
     loadUser();
   }, []);
 
-  // Fetch todos
+  // STEP 2: Fetch todos and attach profile picture for each
+  async function fetchTodosWithProfilePics() {
+    const todoResult = await client.models.Todo.list();
+
+    const itemsWithPics = await Promise.all(
+      todoResult.data.map(async (todo) => {
+        let profilePicUrl: string | undefined;
+
+        // If the todo has an owner (sub), try to get their profile pic
+        if (todo.owner) {
+          const fileName = `profile-pics/${todo.owner}_profile_pic`;
+          try {
+            const { url } = await getUrl({ key: fileName });
+            profilePicUrl = url.toString();
+          } catch (err) {
+            // No profile pic found for this user
+          }
+        }
+
+        return { ...todo, profilePicUrl };
+      })
+    );
+
+    setTodos(itemsWithPics);
+  }
+
+  // STEP 3: Observe todos
   useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
+    fetchTodosWithProfilePics();
+
+    const subscription = client.models.Todo.observeQuery().subscribe({
+      next: () => fetchTodosWithProfilePics(),
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
+  // STEP 4: Delete todo
   function deleteTodo(id: string) {
     client.models.Todo.delete({ id });
   }
 
+  // STEP 5: Create todo
   function createTodo() {
     const content = window.prompt("Todo content");
     if (content) {
-      client.models.Todo.create({ content }); // Owner auto-set by Amplify
+      const todoData: { content: string; owner?: string } = { content };
+      if (user) {
+        todoData.owner = user.sub;
+      }
+      client.models.Todo.create(todoData);
     }
   }
 
+  // STEP 6: Render todos
   return (
     <main>
       <h1>My Todos</h1>
       <button onClick={createTodo}>+ new</button>
       <ul>
         {todos.map((todo) => {
-          const isUserTodo = user && todo.owner === user.sub;
+          const isUserTodo = user?.sub === todo.owner;
+
           return (
             <li
               key={todo.id}
               onClick={() => deleteTodo(todo.id)}
               style={{
-                backgroundColor: isUserTodo ? "#b3e5fc" : "#b3e5fc",
+                backgroundColor: isUserTodo ? "#b3e5fc" : "#f0f0f0",
                 display: "flex",
                 alignItems: "center",
                 padding: "5px",
               }}
             >
-              {isUserTodo && user?.profilePicUrl && (
+              {todo.profilePicUrl && (
                 <img
-                  src={user.profilePicUrl}
+                  src={todo.profilePicUrl}
                   alt="Profile"
                   style={{
                     width: "30px",
