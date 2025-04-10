@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Route, Routes, Link, Navigate, useNavigate } from "react-router-dom";
 import { signOut, fetchAuthSession } from "aws-amplify/auth";
 import { Hub } from "aws-amplify/utils"; // Add Hub for auth events
