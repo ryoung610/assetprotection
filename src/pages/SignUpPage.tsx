@@ -21,7 +21,7 @@ function SignUpPage() {
         options: {
           userAttributes: {
             email,
-            "custom:username": username,
+            "custom:customUsername": username,
             ...(phoneNumber ? { phone_number: phoneNumber } : {}),
           },
         },

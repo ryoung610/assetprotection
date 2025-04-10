@@ -30,7 +30,7 @@ function ProfilePage() {
 
         setUser({
           username,
-          customUsername: payload["custom:username"] as string,
+          customUsername: payload["custom:customUsername"] as string,
         });
       } catch (err) {
         console.error("Error fetching user:", err);
@@ -87,7 +87,7 @@ function ProfilePage() {
     if (newUsername && user) {
       try {
         await updateUserAttributes({
-          userAttributes: { "custom:username": newUsername },
+          userAttributes: { "custom:customUsername": newUsername },
         });
         setUser({ ...user, customUsername: newUsername });
         setNewUsername("");
