@@ -1,11 +1,39 @@
-import  { useState, useEffect } from "react";
-import { BrowserRouter as Router, Route, Routes, Link, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Navigate,
+} from "react-router-dom";
 import { signOut, fetchAuthSession } from "aws-amplify/auth";
-import { Hub } from "aws-amplify/utils"; // Add Hub for auth events
-import TodoPage from "./pages/TodoPage";
+import { Hub } from "aws-amplify/utils";
+import NavBar from "./components/Layout/NavBar";
+import MainPage from "./pages/MainPage";
 import SignUpPage from "./pages/SignUpPage";
 import SignInPage from "./pages/SignInPage";
 import ProfilePage from "./pages/ProfilePage";
+import Home from "./pages/HomePage";
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await fetchAuthSession({ forceRefresh: true });
+        if (!session.tokens?.idToken) throw new Error("No ID token in session");
+        setIsSignedIn(true);
+      } catch (err) {
+        console.error("Auth Check Failed:", err);
+        setIsSignedIn(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  if (isSignedIn === null) return <p className="text-center p-4">Loading...</p>;
+  return isSignedIn ? <>{children}</> : <Navigate to="/signin" />;
+}
 
 function App() {
   useEffect(() => {
@@ -18,108 +46,44 @@ function App() {
       }
     };
     const unsubscribe = Hub.listen("auth", listener);
-
-    Hub.listen("auth", listener);
-    return () => unsubscribe(); // Cleanup listener on unmount
+    return () => unsubscribe();
   }, []);
 
   return (
-    <Router>
-      <div>
-        <h1>Home Page</h1>
-        <nav>
-          <ul>
-            <li><Link to="/">Home</Link></li>
-            <li><Link to="/signup">Sign Up</Link></li>
-            <li><Link to="/signin">Sign In</Link></li>
-            <li><Link to="/profile">Profile</Link></li>
-            <li><Link to="/todos">Todos</Link></li>
-          </ul>
-        </nav>
+    <div className="bg-gray-50 min-h-screen flex">
+      <Router>
+        {/* Sidebar */}
+        <div className="w-64 h-screen bg-white shadow-md fixed">
+          <NavBar />
+        </div>
 
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/todos" element={<TodoPage />} />
-        </Routes>
-      </div>
-    </Router>
-  );
-}
-
-function Home() {
-  const navigate = useNavigate();
-  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await fetchAuthSession({ forceRefresh: true }); // Force token refresh
-        console.log("Home Session:", session);
-        if (!session.tokens?.idToken) throw new Error("No ID token in session");
-        setIsSignedIn(true);
-      } catch (err) {
-        console.error("Home Auth Check Failed:", err);
-        setIsSignedIn(false);
-      }
-    };
-    checkAuth();
-  }, []);
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      setIsSignedIn(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Error signing out:", err);
-    }
-  };
-
-  if (isSignedIn === null) return <p>Loading...</p>;
-  return (
-    <div>
-      <h2>Welcome to My Website</h2>
-      <p>This is the home page.</p>
-      {isSignedIn ? (
-        <>
-          <p>You are signed in!</p>
-          <button onClick={handleSignOut}>Sign Out</button>
-        </>
-      ) : (
-        <>
-          <p>You are not signed in.</p>
-          <button onClick={() => navigate("/signin")}>Sign In</button>
-        </>
-      )}
+        {/* Main Content */}
+        <div className="flex-1 ml-64 p-6 overflow-auto">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/signin" element={<SignInPage />} />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/group/:groupId"
+              element={
+                <ProtectedRoute>
+                  <MainPage />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </div>
+      </Router>
     </div>
   );
-}
-
-function ProtectedRoute({ children }: { children: JSX.Element }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await fetchAuthSession({ forceRefresh: true }); // Force token refresh
-        console.log("ProtectedRoute Session:", session);
-        if (!session.tokens?.idToken) throw new Error("No ID token in session");
-        setIsAuthenticated(true);
-      } catch (err) {
-        console.error("ProtectedRoute Auth Check Failed:", err);
-        setIsAuthenticated(false);
-        navigate("/signin");
-      }
-    };
-    checkAuth();
-  }, [navigate]);
-
-  if (isAuthenticated === null) return <p>Loading...</p>;
-  return isAuthenticated ? children : <Navigate to="/signin" replace />;
 }
 
 export default App;
