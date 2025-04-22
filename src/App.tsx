@@ -1,89 +1,215 @@
-import { useEffect, useState } from "react";
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  Navigate,
-} from "react-router-dom";
-import { signOut, fetchAuthSession } from "aws-amplify/auth";
-import { Hub } from "aws-amplify/utils";
-import NavBar from "./components/Layout/NavBar";
-import MainPage from "./pages/MainPage";
-import SignUpPage from "./pages/SignUpPage";
-import SignInPage from "./pages/SignInPage";
-import ProfilePage from "./pages/ProfilePage";
-import Home from "./pages/HomePage";
+import { useEffect, useState } from 'react';
+import { getCurrentUser, signIn, signUp, confirmSignUp } from '@aws-amplify/auth';
+import { Chat } from './pages/Chat';
+import { HomePage } from './pages/HomePage';
+import { ChatPage } from './components/chat/ChatPage';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
 
+
+const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check if user is already authenticated
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const session = await fetchAuthSession({ forceRefresh: true });
-        if (!session.tokens?.idToken) throw new Error("No ID token in session");
-        setIsSignedIn(true);
-      } catch (err) {
-        console.error("Auth Check Failed:", err);
-        setIsSignedIn(false);
+        await getCurrentUser();
+        setIsAuthenticated(true);
+      } catch {
+        setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
       }
     };
     checkAuth();
   }, []);
 
-  if (isSignedIn === null) return <p className="text-center p-4">Loading...</p>;
-  return isSignedIn ? <>{children}</> : <Navigate to="/signin" />;
-}
+  // Handle sign-in
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await signIn({ username, password });
+      setIsAuthenticated(true);
+      setUsername('');
+      setPassword('');
+    } catch (err: any) {
+      console.error('Sign-in error:', err);
+      setError(err.message || 'Failed to sign in. Please check your credentials.');
+    }
+  };
 
-function App() {
-  useEffect(() => {
-    const listener = (data: any) => {
-      console.log("Auth Event:", data);
-      if (data.payload.event === "signedIn") {
-        console.log("User signed in");
-      } else if (data.payload.event === "signedOut") {
-        console.log("User signed out");
-      }
-    };
-    const unsubscribe = Hub.listen("auth", listener);
-    return () => unsubscribe();
-  }, []);
+  // Handle sign-up
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await signUp({
+        username,
+        password,
+        options: {
+          userAttributes: { email },
+        },
+      });
+      setShowConfirmation(true); // Show confirmation code input
+    } catch (err: any) {
+      console.error('Sign-up error:', err);
+      setError(err.message || 'Failed to sign up. Please try again.');
+    }
+  };
+
+  // Handle confirmation code
+  const handleConfirmSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await confirmSignUp({ username, confirmationCode });
+      setShowConfirmation(false);
+      setIsSignUpMode(false); // Switch to sign-in mode
+      setConfirmationCode('');
+      setEmail('');
+    } catch (err: any) {
+      console.error('Confirmation error:', err);
+      setError(err.message || 'Failed to confirm sign-up. Please check the code.');
+    }
+  };
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-gray-100 flex items-center justify-center">Loading...</div>;
+  }
 
   return (
-    <div className="bg-gray-50 min-h-screen flex">
-      <Router>
-        {/* Sidebar */}
-        <div className="w-64 h-screen bg-white shadow-md fixed">
-          <NavBar />
-        </div>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      {isAuthenticated ? (
+        <ChatPage />
+      ) : (
+        <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold text-center mb-6">
+            {isSignUpMode ? (showConfirmation ? 'Confirm Sign-Up' : 'Sign Up') : 'Sign In'}
+          </h2>
+          {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
-        {/* Main Content */}
-        <div className="flex-1 ml-64 p-6 overflow-auto">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/signup" element={<SignUpPage />} />
-            <Route path="/signin" element={<SignInPage />} />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/group/:groupId"
-              element={
-                <ProtectedRoute>
-                  <MainPage />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
+          {isSignUpMode && showConfirmation ? (
+            // Confirmation form
+            <form onSubmit={handleConfirmSignUp} className="space-y-4">
+              <div>
+                <label htmlFor="confirmationCode" className="block text-sm font-medium text-gray-700">
+                  Confirmation Code
+                </label>
+                <input
+                  id="confirmationCode"
+                  type="text"
+                  value={confirmationCode}
+                  onChange={(e) => setConfirmationCode(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter confirmation code"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Confirm
+              </button>
+              <p className="text-center text-sm text-gray-600 mt-4">
+                Back to{' '}
+                <button
+                  type="button"
+                  className="text-blue-600 hover:underline"
+                  onClick={() => {
+                    setShowConfirmation(false);
+                    setIsSignUpMode(false);
+                    setError(null);
+                  }}
+                >
+                  Sign In
+                </button>
+              </p>
+            </form>
+          ) : (
+            // Sign-in or Sign-up form
+            <form onSubmit={isSignUpMode ? handleSignUp : handleSignIn} className="space-y-4">
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                  Username
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your username"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+              {isSignUpMode && (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter your email"
+                    required
+                  />
+                </div>
+              )}
+              <button
+                type="submit"
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {isSignUpMode ? 'Sign Up' : 'Sign In'}
+              </button>
+              <p className="text-center text-sm text-gray-600 mt-4">
+                {isSignUpMode ? 'Already have an account?' : "Don't have an account?"}{' '}
+                <button
+                  type="button"
+                  className="text-blue-600 hover:underline"
+                  onClick={() => {
+                    setIsSignUpMode(!isSignUpMode);
+                    setError(null);
+                    setUsername('');
+                    setPassword('');
+                    setEmail('');
+                  }}
+                >
+                  {isSignUpMode ? 'Sign In' : 'Sign Up'}
+                </button>
+              </p>
+            </form>
+          )}
         </div>
-      </Router>
+      )}
     </div>
   );
-}
+};
 
 export default App;

@@ -1,150 +1,133 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { fetchAuthSession, signOut } from "aws-amplify/auth";
+import { useEffect, useState } from 'react';
+import { Amplify } from 'aws-amplify';
+import { getCurrentUser } from '@aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+import outputs from '../../amplify_outputs.json';
+import { Schema, Message } from '../../amplify/data/resource';
+import { MessageList } from '../components/chat/MessageList';
+import { MessageInput } from '../components/chat/MessageInput';
 
-const Home: React.FC = () => {
-  const navigate = useNavigate();
-  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
 
-  // Check authentication state
+Amplify.configure(outputs);
+const client = generateClient<Schema>();
+const GROUP_ID = 'your-group-id-here'; // TODO: Replace
+
+export const HomePage: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username?: string } | null>(null);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+
   useEffect(() => {
-    const checkAuth = async () => {
+    const fetchCurrentUser = async () => {
       try {
-        const session = await fetchAuthSession({ forceRefresh: true });
-        if (!session.tokens?.idToken) throw new Error("No ID token in session");
-        setIsSignedIn(true);
+        const user = await getCurrentUser();
+        setCurrentUser({
+          id: user.userId,
+          username: user.username || 'Anonymous',
+        });
       } catch (err) {
-        console.error("Home Auth Check Failed:", err);
-        setIsSignedIn(false);
+        console.error('Error fetching user:', err);
+        setError('Failed to load user data. Please sign in again.');
       }
     };
-    checkAuth();
+    fetchCurrentUser();
   }, []);
 
-  // Handle sign out
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      setIsSignedIn(false);
-      navigate("/");
-    } catch (err) {
-      console.error("Error signing out:", err);
-    }
-  };
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const result = await client.models.Message.list({
+          filter: { groupId: { eq: GROUP_ID } },
+        });
+  
+        // Map raw model instances to clean `Message` type
+        const cleanMessages = (result.data ?? []).map((msg) => ({
+          id: msg.id,
+          content: msg.content ?? undefined,
+          mediaUrl: msg.mediaUrl ?? undefined,
+          groupId: msg.groupId,
+          senderId: msg.senderId,
+          senderName: msg.senderName,
+          sentAt: msg.sentAt,
+          tags: msg.tags ?? undefined,
+          mentions: msg.mentions ?? undefined,
+          attachments: msg.attachments ?? undefined,
+          createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt,
+        })) as Message[];
+  
+        setMessages(cleanMessages);
+  
+      } catch (err) {
+        console.error('Error fetching messages:', err);
+        setError('Failed to load messages. Please ensure you are signed in.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMessages();
+  }, []);
+  
 
-  if (isSignedIn === null) return <div className="text-center p-4">Loading...</div>;
+  if (!currentUser) {
+    return <div className="min-h-screen bg-gray-100 flex items-center justify-center">Loading user data...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Protect Your Assets with Secure Collaboration
-          </h1>
-          <p className="text-lg md:text-xl mb-8">
-            Join secure group chats to manage and protect your assets with confidence.
-          </p>
-          {isSignedIn ? (
-            <Link
-              to="/group/default-group-id"
-              className="inline-block bg-white text-blue-600 font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-gray-100 transition"
-            >
-              Join a Group Chat
-            </Link>
-          ) : (
-            <Link
-              to="/signin"
-              className="inline-block bg-white text-blue-600 font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-gray-100 transition"
-            >
-              Sign In to Start
-            </Link>
+    <div className="h-[calc(100vh-2rem)] flex flex-col bg-gray-100">
+      <div className="p-4 border-b bg-white">
+        <h1 className="text-xl font-bold tracking-tight">Asset Protection Chat</h1>
+        <p className="text-sm text-gray-500">Group Chat</p>
+      </div>
+      <div className="flex-1 flex overflow-hidden">
+        <div className="hidden md:block w-64 bg-white border-r">
+          <div className="p-4">
+            <h3 className="text-sm font-semibold mb-2">Channels</h3>
+            <button className="w-full text-left px-3 py-2 rounded-md bg-blue-100 text-blue-600">
+              # Group Chat
+            </button>
+          </div>
+        </div>
+        <div className="md:hidden p-4">
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+          >
+            {showMobileSidebar ? 'Close Channels' : 'Open Channels'}
+          </button>
+          {showMobileSidebar && (
+            <div className="fixed inset-0 z-50 bg-gray-800/50">
+              <div className="fixed left-0 top-0 h-full w-64 bg-white border-r">
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold mb-2">Channels</h3>
+                  <button
+                    className="w-full text-left px-3 py-2 rounded-md bg-blue-100 text-blue-600"
+                    onClick={() => setShowMobileSidebar(false)}
+                  >
+                    # Group Chat
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">
-            Why Choose Our Asset Protection App?
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <h3 className="text-xl font-semibold mb-4">Secure Group Chats</h3>
-              <p className="text-gray-600">
-                Collaborate with your team in encrypted group chats to discuss asset protection strategies.
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <h3 className="text-xl font-semibold mb-4">Media Sharing</h3>
-              <p className="text-gray-600">
-                Share images and documents securely, stored in protected cloud storage.
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <h3 className="text-xl font-semibold mb-4">Real-Time Updates</h3>
-              <p className="text-gray-600">
-                Stay informed with instant message updates, keeping your team in sync.
-              </p>
-            </div>
+        <div className="flex-1 flex flex-col bg-white">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold">Group Chat</h2>
+            <p className="text-xs text-gray-500">
+              {loading ? 'Loading...' : error ? 'Error loading messages' : `${messages.length} messages`}
+            </p>
+          </div>
+          <div className="flex-1 flex flex-col">
+            <MessageList messages={messages} currentUser={currentUser} error={error} loading={loading} />
+            <MessageInput user={currentUser} groupId={GROUP_ID} setMessages={setMessages} />
           </div>
         </div>
-      </section>
-
-      {/* Call-to-Action Section */}
-      <section className="bg-blue-100 py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">
-            Ready to Secure Your Assets?
-          </h2>
-          <p className="text-lg mb-8">
-            {isSignedIn
-              ? "Explore group chats or manage your profile to get started."
-              : "Sign up or sign in to join the asset protection community."}
-          </p>
-          <div className="flex justify-center space-x-4">
-            {isSignedIn ? (
-              <>
-                <Link
-                  to="/group/default-group-id"
-                  className="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition"
-                >
-                  Go to Group Chat
-                </Link>
-                <button
-                  onClick={handleSignOut}
-                  className="bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 transition"
-                >
-                  Sign Out
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/signup"
-                  className="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition"
-                >
-                  Sign Up
-                </Link>
-                <Link
-                  to="/signin"
-                  className="bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 transition"
-                >
-                  Sign In
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-4 text-center">
-        <p>🥳 Asset Protection App &copy; 2025</p>
-      </footer>
+      </div>
     </div>
   );
 };
 
-export default Home;
+export default HomePage;

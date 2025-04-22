@@ -13,6 +13,7 @@ interface MessageInput {
   groupId: string;
   senderId: string;
   sentAt: string;
+  senderName:string;
 }
 
 const MainPage: React.FC = () => {
@@ -200,6 +201,7 @@ const MainPage: React.FC = () => {
       groupId,
       senderId: user.sub,
       sentAt: new Date().toISOString(),
+      senderName: user.sub, // TODO: Replace with actual username
     };
 
     try {

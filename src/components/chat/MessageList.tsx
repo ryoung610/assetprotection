@@ -1,100 +1,41 @@
-
-import { AlertTriangle, School } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChatMessage, User } from "@/types";
+// src/components/MessageList.tsx
+import { Message } from '../../../amplify/data/resource';
 
 interface MessageListProps {
-  messages: ChatMessage[];
-  currentUser: User;
+  messages: Message[];
+  currentUser: { id: string; username?: string };
+  error: string | null;
+  loading: boolean;
 }
 
-export const MessageList = ({ messages, currentUser }: MessageListProps) => {
+export const MessageList: React.FC<MessageListProps> = ({ messages, currentUser, error, loading }) => {
   return (
-    <ScrollArea className="flex-1 p-4">
-      <div className="space-y-4">
-        {messages?.map((message) => {
-          let messageStyle = "bg-muted";
-          let specialContent = null;
-          
-          if (message.senderId === currentUser.id) {
-            messageStyle = "bg-primary text-primary-foreground";
-          }
-          
-          if (message.tags?.includes('Urgent')) {
-            messageStyle = "bg-red-100 border-2 border-red-500 text-red-900";
-            specialContent = (
-              <div className="flex items-center mb-2">
-                <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
-                <span className="font-bold text-red-700">URGENT</span>
+    <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+      {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-center">Loading messages...</p>
+      ) : messages.length === 0 ? (
+        <p className="text-gray-500 text-center">No messages yet.</p>
+      ) : (
+        messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`mb-3 p-3 rounded-lg shadow-sm ${
+              msg.senderId === currentUser.id ? 'bg-blue-100 ml-8' : 'bg-white mr-8'
+            }`}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <strong className="text-blue-600">{msg.senderName || 'Anonymous'}: </strong>
+                <span>{msg.content || ''}</span>
               </div>
-            );
-          } else if (message.tags?.includes('Incidents')) {
-            messageStyle = "bg-yellow-100 border-2 border-yellow-500 text-yellow-900";
-            specialContent = (
-              <div className="flex items-center mb-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2" />
-                <span className="font-bold text-yellow-700">INCIDENT</span>
-              </div>
-            );
-          } else if (message.tags?.includes('Training')) {
-            messageStyle = "bg-green-100 border-2 border-green-500 text-green-900";
-            specialContent = (
-              <div className="flex items-center mb-2">
-                <School className="h-5 w-5 text-green-500 mr-2" />
-                <span className="font-bold text-green-700">TRAINING</span>
-              </div>
-            );
-          }
-          
-          return (
-            <div 
-              key={message.id} 
-              className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-[70%] rounded-lg p-3 ${messageStyle}`}>
-                {specialContent}
-                
-                {message.senderId !== currentUser.id && (
-                  <div className="font-semibold text-sm mb-1">{message.senderName}</div>
-                )}
-                <p>{message.content}</p>
-                
-                {message.attachments && message.attachments.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    {message.attachments.map((attachment, index) => (
-                      <div key={index} className="rounded overflow-hidden border border-white/20 bg-white/10">
-                        {attachment.type === "image" && (
-                          <img 
-                            src={attachment.url} 
-                            alt={attachment.name} 
-                            className="max-h-48 w-full object-contain"
-                          />
-                        )}
-                        {attachment.type === "video" && (
-                          <video 
-                            src={attachment.url} 
-                            controls 
-                            className="max-h-48 w-full"
-                          />
-                        )}
-                        {attachment.type === "pdf" && (
-                          <div className="p-2 flex items-center">
-                            <span className="text-xs truncate">{attachment.name}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                <div className="text-xs opacity-70 mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
+              <small className="text-gray-400 text-xs">
+                {new Date(msg.sentAt).toLocaleTimeString()}
+              </small>
             </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
+          </div>
+        ))
+      )}
+    </div>
   );
 };
